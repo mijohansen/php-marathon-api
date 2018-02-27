@@ -1,0 +1,30 @@
+{
+  "name": "mijohansen/php-marathon-client",
+  "description": "Simple library to connect to Kalin Setterberg's Marathon standard API.",
+  "type": "library",
+  "version": "0.1",
+  "minimum-stability": "dev",
+  "authors": [
+    {
+      "name": "Michael Johansen",
+      "email": "michael.johansen@gmail.com"
+    }
+  ],
+  "require": {
+    "php": ">=5.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Kase\\": "src"
+    }
+  },
+  "require-dev": {
+    "php": ">=5.5",
+    "doctrine/instantiator": "v1.0.5",
+    "phpdocumentor/reflection-docblock": "^3.0.3",
+    "phpunit/phpunit": "v4.8",
+    "phpunit/php-timer": "v1.0.9"
+  },
+  "scripts": {
+  }
+}
