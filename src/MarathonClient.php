@@ -18,18 +18,24 @@ class MarathonClient {
     const FEECODE = "feecode";
     const ORDER_NUMBER = "order_number";
 
+    const CONF_SERVER_ADDRESS = "server_address";
+    const CONF_PROGRAM = "program";
+    const CONF_COMPANY_ID = "company_id";
+    const CONF_PASSWORD = ".password";
+    const CONF_INTERNAL_PASSWORD = ".internal_password";
+
     protected $marathon_server_address;
     protected $program;
     protected $password;
     protected $company_id;
     protected $internal_password;
 
-    public function __construct($marathon_server_address, $program, $password, $internal_password, $company_id) {
-        $this->marathon_server_address = $marathon_server_address;
-        $this->program = $program;
-        $this->password = $password;
-        $this->company_id = $company_id;
-        $this->internal_password = $internal_password;
+    public function __construct(Array $config) {
+        $this->marathon_server_address = $config[self::CONF_SERVER_ADDRESS];
+        $this->program = $config[self::CONF_PROGRAM];
+        $this->password = $config[self::CONF_PASSWORD];
+        $this->company_id = $config[self::CONF_COMPANY_ID];
+        $this->internal_password = $config[self::CONF_INTERNAL_PASSWORD];
     }
 
     public function get_endpoint_url() {
@@ -92,6 +98,7 @@ class MarathonClient {
     }
 
     public function get_collective_mediatypes() {
+        return $this->__request(__FUNCTION__);
     }
 
     public function get_mediatypes($collective_mediatype_id = null) {
@@ -129,30 +136,54 @@ class MarathonClient {
     public function scratch_plan($client_id) {
     }
 
+    /**
+     * Returns an flattened and transformed order_lines.
+     * plan_nr,orde_nr,inf_lopnr and pris_lopnr creates an unique key.
+     *
+     * @param $order_number
+     * @return array
+     */
     public function get_order($order_number) {
         $result = $this->__raw_request(__FUNCTION__, [
             "order_number" => $order_number,
         ]);
-        print_r($result);
+        /**
+         * Nesting out this terrible structure to create something that might be usable.
+         */
         $order = $result["pur"]["orde"];
-        $pris = $result["pur"]["orde"]["inf"]["pris"];
-        $order_lines = [];
-        if (isset($pris["pris-lopnr"])) {
-            $order_lines[] = array_merge_recursive($order, $pris);
+
+        if (isset($result["pur"]["orde"]["inf"]["inf-lopnr"])) {
+            $infos = [$result["pur"]["orde"]["inf"]];
         } else {
-            foreach ($pris as $line) {
-                $order_lines[] = array_merge_recursive($order, $line);
+            $infos = $result["pur"]["orde"]["inf"];
+        }
+        $order_lines = [];
+        foreach ($infos as $info) {
+            if (isset($info["pris"]["pris-lopnr"])) {
+                $prices = [$info["pris"]];
+            } else {
+                $prices = $info["pris"];
+            }
+            foreach ($prices as $pris) {
+                $order_lines[] = array_merge_recursive($order, $info, $pris);
             }
         }
+
+        /**
+         * Removing arrays and moving dashes to underscores.
+         */
+        $transformed_order_lines = [];
         foreach ($order_lines as $i => $order_line) {
-            foreach (array_keys($order_line) as $key) {
-                if (is_array($order_lines[$i][$key])) {
-                    unset($order_lines[$i][$key]);
+            foreach ($order_line as $key => $value) {
+                if (!is_array($order_line[$key])) {
+                    $transformed_key = str_replace("-", "_", $key);
+                    $transformed_order_lines[$i][$transformed_key] = $value;
                 }
             }
 
         }
-        return $order_lines;
+
+        return $transformed_order_lines;
     }
 
     public function get_orders($client_id = null, $media_id = null, $from_insertion_date = null, $to_insertion_date = null) {
@@ -162,6 +193,35 @@ class MarathonClient {
             "from_insertion_date" => $from_insertion_date,
             "to_insertion_date" => $to_insertion_date,
         ], self::ORDER_NUMBER);
+    }
+
+    public function get_orders_with_data($client_id = null, $media_id = null, $from_insertion_date = null, $to_insertion_date = null) {
+        $order_numbers = $this->get_orders($client_id, $media_id, $from_insertion_date, $to_insertion_date);
+
+        $orders = [];
+        foreach ($order_numbers as $order_number) {
+            $orders = array_merge($orders, $this->get_order($order_number));
+        }
+        foreach ($orders as $key => $order){
+            $orders[$key] = MarathonUtil::cast_to_int($order, [
+                "plan_nr",
+                "orde_nr",
+                "inf_inf_dat",
+                "inf_slutdat",
+                "inf_lopnr",
+                "inf_dagar",
+                "orde_mediatyp_kod",
+                "orde_bredd",
+                "orde_hojd",
+                "orde_antalformat",
+                "orde_upplaga",
+                "orde_lasartal",
+                "inf_mtrlnr",
+                "pris_lopnr",
+                "pris_till_kod"
+            ]);
+        }
+        return $orders;
     }
 
     public function create_order($client_id) {
@@ -232,14 +292,25 @@ class MarathonClient {
         ], self::FEECODE);
     }
 
-    public function get_employee($client_id) {
+    public function get_employee($employee_id = null) {
+        return $this->__request(__FUNCTION__, [
+            "employee_id" => $employee_id
+        ]);
     }
 
     public function get_employees() {
         return $this->__request(__FUNCTION__);
     }
 
-    public function get_timereports($employee_id, $from_date, $to_date) {
+    /**
+     * If run without employee_id it will return timereports for all users
+     *
+     * @param $employee_id
+     * @param $from_date
+     * @param $to_date
+     * @return mixed
+     */
+    public function get_timereports($employee_id = null, $from_date, $to_date) {
         return $this->__request(__FUNCTION__, [
             "employee_id" => $employee_id,
             "from_date" => $from_date,
@@ -247,14 +318,101 @@ class MarathonClient {
         ], self::TIMEREPORT);
     }
 
+
+    public function get_timereports_flat($employee_id = null, $from_date, $to_date) {
+        $timereports = $this->get_timereports($employee_id, $from_date, $to_date);
+        return MarathonUtil::flatten_timereports($timereports);
+    }
+
     public function create_timereport($client_id) {
     }
 
+    /**
+     * @param $invoice_number
+     * @return mixed
+     */
     public function get_proinvoice($invoice_number) {
         $invoice = $this->__request(__FUNCTION__, [
             "invoice_number" => $invoice_number,
         ]);
-        return $invoice[self::INVOICE];
+        if (isset($invoice[self::INVOICE])) {
+            return $invoice[self::INVOICE];
+        } else {
+            return false;
+        }
+    }
+
+
+    /**
+     * @param $invoice_number
+     * @return mixed
+     */
+    public function get_proinvoice_flat($invoice_number) {
+        $invoice = $this->get_proinvoice($invoice_number);
+        if (isset($invoice["base_currency"])) {
+            foreach ($invoice["base_currency"] as $key => $value) {
+                $invoice["base_" . $key] = $value;
+            }
+        }
+        if (isset($invoice["invoice_currency"])) {
+            foreach ($invoice["invoice_currency"] as $key => $value) {
+                $invoice["invoice_" . $key] = $value;
+            }
+        }
+        foreach ($invoice as $key => $value) {
+            if (is_array($invoice[$key])) {
+                unset($invoice[$key]);
+            }
+        }
+        //$invoice = MarathonUtil::remove_char($invoice, "*", ",");
+
+        $invoice = MarathonUtil::cast_to_date($invoice, [
+            "invoice_date",
+            "due_date",
+            "booking_date"
+        ], "Ymd");
+        $invoice = MarathonUtil::cast_to_int($invoice, [
+            "invoice_number",
+            "invoice_date",
+            "due_date",
+            "booking_date"
+        ]);
+        $invoice = MarathonUtil::cast_to_float($invoice, [
+            "base_fee",
+            "base_purchase",
+            "base_other",
+            "base_pre_invoiced",
+            "base_rounding",
+            "base_vat",
+            "base_total",
+            "invoice_excl_vat",
+            "invoice_vat",
+            "invoice_total",
+        ], 2);
+        return $invoice;
+    }
+
+    /**
+     * Returns all invoices from a number untill there is no more invoices or
+     * limit is reached.
+     *
+     * @param $invoice_start
+     * @param int $limit
+     * @return array
+     */
+    public function get_invoices_from_number($invoice_start, $limit = 50) {
+        $invoices = [];
+        do {
+            $invoice_data = [];
+            try {
+                $invoice_data = $this->get_proinvoice_flat($invoice_start);
+                $invoices[] = $invoice_data;
+            } catch (\Exception $exception) {
+
+            }
+            $invoice_start++;
+        } while (count($invoice_data) && count($invoices) <= $limit);
+        return $invoices;
     }
 
     public function get_proinvoices($client_id, $project_no) {
@@ -264,7 +422,29 @@ class MarathonClient {
         ]);
     }
 
-    protected function get_medias() {
+    /**
+     * Input: filtering on media name, media type, collective media type and country Output: active medias
+     * Filtering can be done on the name with the field filter_media_name. Filtering can be done with a wild card (*)
+     * in the beginning and at the end of the filter string.
+     * Filtering can also be done on the media type code, collective media type code and country code with the fields
+     * filter_media_type, filter_collective_media_type and filter_country. More than one code can be filtered resulting
+     * in all medias with any of the codes returned. When filtering on more than one code the codes should be delimited
+     * by comma or space.
+     *
+     *
+     * @param string $filter_media_name
+     * @param string $filter_media_type
+     * @param string $filter_collective_media_type
+     * @param string $filter_country
+     * @return mixed
+     */
+    public function get_medias($filter_media_name = null, $filter_media_type = null, $filter_collective_media_type = null, $filter_country = null) {
+        return $this->__request(__FUNCTION__, [
+            "filter_media_name" => $filter_media_name,
+            "filter_media_type" => $filter_media_type,
+            "filter_collective_media_type" => $filter_collective_media_type,
+            "filter_country" => $filter_country
+        ], "media");
     }
 
     public function create_plan($plan_data) {
