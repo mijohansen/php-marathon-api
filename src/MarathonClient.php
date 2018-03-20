@@ -47,6 +47,7 @@ class MarathonClient {
         $request_data["password"] = $this->internal_password;
         $request_data["company_id"] = $this->company_id;
         $url = $this->get_endpoint_url();
+        syslog(LOG_INFO, __METHOD__." ". json_encode($request_data));
         return MarathonUtil::fetch($url, $request_data, $expected_type);
     }
 
@@ -107,7 +108,6 @@ class MarathonClient {
         ]);
     }
 
-
     public function get_discount_codes() {
     }
 
@@ -131,7 +131,6 @@ class MarathonClient {
 
     public function get_changed_plans($from) {
     }
-
 
     public function scratch_plan($client_id) {
     }
@@ -202,7 +201,7 @@ class MarathonClient {
         foreach ($order_numbers as $order_number) {
             $orders = array_merge($orders, $this->get_order($order_number));
         }
-        foreach ($orders as $key => $order){
+        foreach ($orders as $key => $order) {
             $orders[$key] = MarathonUtil::cast_to_int($order, [
                 "plan_nr",
                 "orde_nr",
@@ -311,17 +310,20 @@ class MarathonClient {
      * @return mixed
      */
     public function get_timereports($employee_id = null, $from_date, $to_date) {
-        return $this->__request(__FUNCTION__, [
+        $result =  $this->__request(__FUNCTION__, [
             "employee_id" => $employee_id,
             "from_date" => $from_date,
             "to_date" => $to_date,
         ], self::TIMEREPORT);
-    }
 
+        return $result;
+    }
 
     public function get_timereports_flat($employee_id = null, $from_date, $to_date) {
         $timereports = $this->get_timereports($employee_id, $from_date, $to_date);
-        return MarathonUtil::flatten_timereports($timereports);
+        $timereports = MarathonUtil::flatten_timereports($timereports);
+        $timereports = MarathonUtil::sort_array_by_key($timereports,"date");
+        return $timereports;
     }
 
     public function create_timereport($client_id) {
@@ -341,7 +343,6 @@ class MarathonClient {
             return false;
         }
     }
-
 
     /**
      * @param $invoice_number

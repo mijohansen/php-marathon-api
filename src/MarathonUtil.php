@@ -162,4 +162,12 @@ class MarathonUtil {
         }
         fclose($fp);
     }
+
+    static function sort_array_by_key($input_array, $key) {
+        usort($input_array, function ($item1, $item2) use ($key) {
+            if ($item1[$key] == $item2[$key]) return 0;
+            return $item1[$key] < $item2[$key] ? -1 : 1;
+        });
+        return $input_array;
+    }
 }
