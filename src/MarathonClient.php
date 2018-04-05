@@ -47,7 +47,6 @@ class MarathonClient {
         $request_data["password"] = $this->internal_password;
         $request_data["company_id"] = $this->company_id;
         $url = $this->get_endpoint_url();
-        syslog(LOG_INFO, __METHOD__." ". json_encode($request_data));
         return MarathonUtil::fetch($url, $request_data, $expected_type);
     }
 
@@ -185,6 +184,15 @@ class MarathonClient {
         return $transformed_order_lines;
     }
 
+    /**
+     * Returns an array with orders numbers
+     *
+     * @param null $client_id
+     * @param null $media_id
+     * @param null $from_insertion_date
+     * @param null $to_insertion_date
+     * @return array
+     */
     public function get_orders($client_id = null, $media_id = null, $from_insertion_date = null, $to_insertion_date = null) {
         return $this->__request(__FUNCTION__, [
             "client_id" => $client_id,
@@ -199,6 +207,9 @@ class MarathonClient {
 
         $orders = [];
         foreach ($order_numbers as $order_number) {
+            /**
+             * Get order returnes
+             */
             $orders = array_merge($orders, $this->get_order($order_number));
         }
         foreach ($orders as $key => $order) {
@@ -261,7 +272,7 @@ class MarathonClient {
         return $result;
     }
 
-    public function get_project($client_id, $project_no, $from_date, $to_date) {
+    public function get_project($client_id, $project_no = null, $from_date = null, $to_date = null) {
         $project = $this->__request(__FUNCTION__, [
             "client_id" => $client_id,
             "project_no" => $project_no,
@@ -271,7 +282,7 @@ class MarathonClient {
         return $project;
     }
 
-    public function get_projects($client_id, $timereporting = true) {
+    public function get_projects($client_id = null, $timereporting = true) {
         $projects = $this->__request(__FUNCTION__, [
             "client_id" => $client_id,
             "timereporting" => $timereporting
@@ -310,7 +321,7 @@ class MarathonClient {
      * @return mixed
      */
     public function get_timereports($employee_id = null, $from_date, $to_date) {
-        $result =  $this->__request(__FUNCTION__, [
+        $result = $this->__request(__FUNCTION__, [
             "employee_id" => $employee_id,
             "from_date" => $from_date,
             "to_date" => $to_date,
@@ -322,7 +333,7 @@ class MarathonClient {
     public function get_timereports_flat($employee_id = null, $from_date, $to_date) {
         $timereports = $this->get_timereports($employee_id, $from_date, $to_date);
         $timereports = MarathonUtil::flatten_timereports($timereports);
-        $timereports = MarathonUtil::sort_array_by_key($timereports,"date");
+        $timereports = MarathonUtil::sort_array_by_key($timereports, "date");
         return $timereports;
     }
 
@@ -450,4 +461,27 @@ class MarathonClient {
 
     public function create_plan($plan_data) {
     }
+
+    /**
+     * @return array
+     */
+    public function get_all_projects() {
+        $clients = $this->get_proclients();
+        $rows = [];
+        foreach ($clients as $client) {
+            $projects = $this->get_projects($client["id"]);
+            foreach ($projects as $project) {
+                $row = [];
+                foreach ($client as $key => $val) {
+                    $row["client_" . $key] = $val;
+                }
+                foreach ($project as $key => $val) {
+                    $row["project_" . $key] = $val;
+                }
+                $rows[] = $row;
+            }
+        }
+        return $rows;
+    }
+
 }

@@ -6,15 +6,28 @@ class MarathonUtil {
 
     static function raw_fetch($url, $request) {
         $request_xml = self::createXML($request);
+        $headers = array('Content-Type: text/xml');
+        /*
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $request_xml);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 500);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: text/xml'));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $data = curl_exec($ch);
         curl_close($ch);
+        */
+        $opts = [
+            "http" => [
+                "method" => "POST",
+                "header" => implode("\r\n", $headers),
+                'timeout' => 500,
+                "content" => $request_xml
+            ]
+        ];
+        $stream_context = stream_context_create($opts);
+        $data = file_get_contents($url, false, $stream_context);
         $result_xmlobj = simplexml_load_string($data);
         $result_json = json_encode($result_xmlobj);
         $result_array = json_decode($result_json, TRUE);
@@ -29,7 +42,6 @@ class MarathonUtil {
      */
     static function fetch($url, $request, $expected_type) {
         $result_array = self::raw_fetch($url, $request);
-
         if ($result_array["status"] == "OK") {
             if (is_null($expected_type)) {
                 return $result_array;
@@ -86,7 +98,7 @@ class MarathonUtil {
             $key = md5(implode("*", $key_parts));
             if (!isset($output[$key])) {
                 $output[$key] = $timereport;
-                $output[$key]["hours"] = 0;
+                $output[$key]["hours"] = 0.0;
                 $output[$key]["comment"] = [];
                 $output[$key]["date"] = date("Ymd", strtotime($timereport["date"]));
             }
@@ -98,7 +110,7 @@ class MarathonUtil {
         foreach ($output as $key => $timereport) {
             $output[$key]["comment"] = implode(PHP_EOL, $timereport["comment"]);
             $output[$key]["date"] = (int)$timereport["date"];
-            $output[$key]["hours"] = number_format((float)$timereport["hours"], 2);
+            $output[$key]["hours"] = floatval(number_format((float)$timereport["hours"], 2));
         }
         return array_values($output);
     }
@@ -106,7 +118,7 @@ class MarathonUtil {
     static function cast_to_float($input_array, $fields_to_cast, $decimals = 2) {
         foreach ($fields_to_cast as $field_name) {
             if (isset($input_array[$field_name])) {
-                $input_array[$field_name] = number_format((float)$input_array[$field_name], $decimals, '.', false);
+                $input_array[$field_name] = floatval(number_format((float)$input_array[$field_name], $decimals, '.', false));
             }
         }
         return $input_array;
