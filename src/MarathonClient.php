@@ -408,11 +408,13 @@ class MarathonClient {
      * Returns all invoices from a number untill there is no more invoices or
      * limit is reached.
      *
+     * Fairly efficient. Each call should take max 20 seconds to complete.
+     *
      * @param $invoice_start
      * @param int $limit
      * @return array
      */
-    public function get_invoices_from_number($invoice_start, $limit = 50) {
+    public function get_invoices_from_number($invoice_start, $limit = 100) {
         $invoices = [];
         do {
             $invoice_data = [];
@@ -423,7 +425,7 @@ class MarathonClient {
 
             }
             $invoice_start++;
-        } while (count($invoice_data) && count($invoices) <= $limit);
+        } while (count($invoice_data) && count($invoices) < $limit);
         return $invoices;
     }
 
