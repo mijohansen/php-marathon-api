@@ -125,13 +125,105 @@ class MarathonClient {
     public function create_campaign($campaign_data) {
     }
 
-    public function get_plan($plan_id) {
+    public function get_plan($plan_number) {
+        return $this->__raw_request(__FUNCTION__, [
+            "plan_number" => $plan_number
+        ]);
     }
 
+    public function get_plan_filtered($plan_number) {
+        $plan = $this->get_plan($plan_number);
+        if (isset($plan["pur"]) && isset($plan["pur"]["plan"])) {
+            $filtered_plan = [];
+            foreach ($plan["pur"]["plan"] as $key => $val) {
+                if ($key === "orde") {
+                    continue;
+                }
+                $transformed_key = str_replace("-", "_", $key);
+                if (is_array($val)) {
+                    $val = join(",", $val);
+                }
+                $filtered_plan[$transformed_key] = $val;
+            }
+
+            $filtered_plan = MarathonUtil::cast_to_int($filtered_plan, [
+                "plan_nr",
+                "plan_utskrift_dat",
+                "plan_kund_grupp_kod",
+                "plan_skapat_dat",
+                "plan_godk_dat",
+                "plan_grupp_kod"
+            ]);
+
+            return $filtered_plan;
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * This file requests a list of changed plans and orders since a specific date.
+     * Input: date
+     * Output: list of plans
+     *
+     * @param $from
+     * @return array
+     */
     public function get_changed_plans($from) {
         return $this->__request(__FUNCTION__, [
             "from" => $from
-        ]);
+        ], "plan");
+    }
+
+    public function get_changed_plans_only($from) {
+        $plans = $this->get_changed_plans($from);
+        $changed_plans = [];
+        foreach ($plans as $plan) {
+            if (isset($plan["plan_changed"]) && $plan["plan_changed"] === "true") {
+                $changed_plans[] = $plan["plan_id"];
+            }
+        }
+        return $changed_plans;
+    }
+
+    /**
+     * Returns changed orders in a simple array
+     * based on `get_changed_plans`
+     *
+     * @param $from
+     * @return array
+     */
+    public function get_changed_orders($from) {
+        $changed_orders = [];
+        $plans = self::get_changed_plans($from);
+        if (!$plans) {
+            return $changed_orders;
+        }
+        foreach ($plans as $plan) {
+            if (isset($plan["order"])) {
+                if (isset($plan["order"]["order_id"])) {
+                    $order_id = $plan["order"]["order_id"];
+                    $changed_orders[$order_id] = $plan["order"]["order_changed"];
+                } else {
+                    foreach ($plan["order"] as $order) {
+                        $changed_orders[$order["order_id"]] = $order["order_changed"];
+                    }
+                }
+            }
+        }
+        $changed_orders = array_keys($changed_orders);
+        return $changed_orders;
+    }
+
+    public function get_changed_orders_paginated($from, $page, $limit = 50) {
+        $offset = ($page - 1) * $limit;
+        $changed_orders = $this->get_changed_orders($from);
+        return array_slice($changed_orders, $offset, $limit);
+    }
+
+    public function get_changed_orders_paginated_with_data($from, $page, $limit = 50) {
+        $order_numbers = $this->get_changed_orders_paginated($from, $page, $limit);
+        return $this->get_orders_filtered($order_numbers);
     }
 
     public function scratch_plan($client_id) {
@@ -207,18 +299,36 @@ class MarathonClient {
 
     public function get_orders_with_data($client_id = null, $media_id = null, $from_insertion_date = null, $to_insertion_date = null) {
         $order_numbers = $this->get_orders($client_id, $media_id, $from_insertion_date, $to_insertion_date);
+        return $this->get_orders_filtered($order_numbers);
+    }
 
+    /**
+     * This function will return all changed orderlines today. For use in syncing to local data storages.
+     *
+     * @return array
+     */
+    public function get_changed_orders_today() {
+        $order_numbers = $this->get_changed_orders(date("Y-m-d"));
+        return $this->get_orders_filtered($order_numbers);
+    }
+
+    public function get_orders_filtered($order_numbers) {
         $orders = [];
         foreach ($order_numbers as $order_number) {
-            /**
-             * Get order returnes
-             */
-            $orders = array_merge($orders, $this->get_order($order_number));
+            $orders = array_merge($orders, $this->get_order_filtered($order_number));
         }
+        return $orders;
+    }
+
+    /**
+     * @param $order_number
+     * @return array
+     */
+    public function get_order_filtered($order_number) {
+        $orders = $this->get_order($order_number);
         foreach ($orders as $key => $order) {
-            $orders[$key] = MarathonUtil::cast_to_int($order, [
+            $order = MarathonUtil::cast_to_int($order, [
                 "plan_nr",
-                "orde_nr",
                 "inf_inf_dat",
                 "inf_slutdat",
                 "inf_lopnr",
@@ -231,8 +341,50 @@ class MarathonClient {
                 "orde_lasartal",
                 "inf_mtrlnr",
                 "pris_lopnr",
-                "pris_till_kod"
+                "pris_till_kod",
+                "mdb_in_visning_unik",
+                "mdb_in_visning_tot",
+                "inf_media_upplaga",
+                "inf_media_lasartal",
             ]);
+            $order = MarathonUtil::cast_to_float($order, [
+                "pris_antal",
+                "orde_agency_ctc",
+                "pris_bas_apris",
+                "pris_bas_brutto",
+                "pris_bas_ctc",
+                "pris_bas_kapk_kapk_1",
+                "pris_bas_kapk_kapk_2",
+                "pris_bas_kapk_kapk_3",
+                "pris_bas_kapk_kapk_4",
+                "pris_bas_kapk_kapk_tot",
+                "pris_bas_kapk_rab",
+                "pris_bas_kapk_tot",
+                "pris_bas_netnet",
+                "pris_bas_netto",
+                "pris_bas_ordk_1",
+                "pris_bas_ordk_2",
+                "pris_bas_ordk_3",
+                "pris_bas_ordk_tot",
+                "pris_prov_bas_belopp_tot",
+                "pris_prov_utl_belopp_tot",
+                "pris_utl_brutto",
+                "pris_utl_ctc",
+                "pris_utl_kapk_kapk_1",
+                "pris_utl_kapk_kapk_2",
+                "pris_utl_kapk_kapk_3",
+                "pris_utl_kapk_kapk_4",
+                "pris_utl_kapk_kapk_tot",
+                "pris_utl_kapk_rab",
+                "pris_utl_kapk_tot",
+                "pris_utl_netnet",
+                "pris_utl_netto",
+                "pris_utl_ordk_1",
+                "pris_utl_ordk_2",
+                "pris_utl_ordk_3",
+                "pris_utl_ordk_tot",
+            ]);
+            $orders[$key] = $order;
         }
         return $orders;
     }

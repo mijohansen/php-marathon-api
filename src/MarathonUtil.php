@@ -4,30 +4,41 @@ namespace Kase;
 
 class MarathonUtil {
 
-    static function raw_fetch($url, $request) {
-        $request_xml = self::createXML($request);
-        $headers = array('Content-Type: text/xml');
-        /*
+    static function fetch_with_curl($url, $headers, $request) {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $request_xml);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $request);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 500);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $data = curl_exec($ch);
         curl_close($ch);
-        */
+        return $data;
+    }
+
+    static function fetch_native($url, $headers, $request) {
         $opts = [
             "http" => [
                 "method" => "POST",
                 "header" => implode("\r\n", $headers),
                 'timeout' => 500,
-                "content" => $request_xml
+                "content" => $request
             ]
         ];
         $stream_context = stream_context_create($opts);
         $data = file_get_contents($url, false, $stream_context);
+        return $data;
+    }
+
+    static function raw_fetch($url, $request, $fetch_with_curl = false) {
+        $request_xml = self::createXML($request);
+        $headers = array('Content-Type: text/xml');
+        if ($fetch_with_curl) {
+            $data = self::fetch_with_curl($url, $headers, $request_xml);
+        } else {
+            $data = self::fetch_native($url, $headers, $request_xml);
+        }
         $result_xmlobj = simplexml_load_string($data);
         $result_json = json_encode($result_xmlobj);
         $result_array = json_decode($result_json, TRUE);
@@ -55,7 +66,7 @@ class MarathonUtil {
             throw new MarathonException($result_array["message"]);
         } else {
 
-            throw new MarathonException("Unknown Error returned: ". json_encode($result_array));
+            throw new MarathonException("Unknown Error returned: " . json_encode($result_array));
         }
     }
 
