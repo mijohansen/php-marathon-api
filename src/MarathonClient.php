@@ -129,6 +129,9 @@ class MarathonClient {
     }
 
     public function get_changed_plans($from) {
+        return $this->__request(__FUNCTION__, [
+            "from" => $from
+        ]);
     }
 
     public function scratch_plan($client_id) {

@@ -55,7 +55,7 @@ class MarathonUtil {
             throw new MarathonException($result_array["message"]);
         } else {
 
-            throw new MarathonException("Unknown Error");
+            throw new MarathonException("Unknown Error returned: ". json_encode($result_array));
         }
     }
 

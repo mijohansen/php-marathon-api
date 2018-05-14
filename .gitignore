@@ -1,6 +1,6 @@
 composer.phar
 /vendor/
-/testing*
+/*testing*
 /.idea/
 *.lock
 *.log

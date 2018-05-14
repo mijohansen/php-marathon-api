@@ -2,7 +2,7 @@
   "name": "mijohansen/php-marathon-client",
   "description": "Simple library to connect to Kalin Setterberg's Marathon standard API.",
   "type": "library",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minimum-stability": "dev",
   "prefer-stable": true,
   "license": "Apache-2.0",
